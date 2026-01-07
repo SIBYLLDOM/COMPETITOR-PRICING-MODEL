@@ -1,37 +1,46 @@
 # processors/l1_price_band.py
 
+
+
 import pandas as pd
+
 
 def calculate_l1_price_band(company_check_csv):
     """
-    Returns a govt-safe low & high price band for L1.
+    Calculates L1 price band using INTERNAL market_average.
+    market_average is NOT saved.
     """
 
     df = pd.read_csv(company_check_csv)
-    df.columns = df.columns.str.strip()
 
-    market_avg = df["market_average"].iloc[0]
+    required = {
+        "recommended_price",
+        "last_ranked_price",
+        "least_price",
+        "average"
+    }
 
-    min_last_ranked = df["last_ranked_price"].min()
-    min_least_price = df["least_price"].min()
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"Missing columns: {missing}")
+
+    # INTERNAL ONLY
+    market_average = df["average"].mean()
+
+    min_last_rank = df["last_ranked_price"].min()
+    min_least = df["least_price"].min()
     min_recommended = df["recommended_price"].min()
 
-    # ----- LOW PRICE (aggressive but safe) -----
-    low_price = max(
-        min_last_ranked,
-        min_least_price,
-        market_avg * 0.95
-    )
+    # Low price: must beat competition but not crash market
+    low_price = min(min_last_rank, min_least, market_average)
 
-    # ----- HIGH PRICE (upper L1 boundary) -----
-    high_price = min(
-        min_recommended,
-        market_avg,
-        market_avg * 1.02
-    )
+    # High price: safe competitive ceiling
+    high_price = min(min_recommended, market_average)
 
-    # ----- Safety correction -----
-    if low_price >= high_price:
-        high_price = low_price * 1.03
+    low_price = round(low_price, 2)
+    high_price = round(high_price, 2)
 
-    return round(low_price, 2), round(high_price, 2)
+    if high_price < low_price:
+        high_price = low_price
+
+    return low_price, high_price

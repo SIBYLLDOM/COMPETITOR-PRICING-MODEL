@@ -2,42 +2,51 @@
 
 import pandas as pd
 
+
 def enrich_with_final_price(company_check_csv):
     """
-    Adds recommended_price column based on 4 checkpoints.
-    Updates company_check.csv in-place.
+    Computes recommended_price using INTERNAL market_average.
+    market_average is NOT saved.
     """
 
     df = pd.read_csv(company_check_csv)
-    df.columns = df.columns.str.strip()
 
-    final_prices = []
+    required = {
+        "average",
+        "inflation_rate_percent",
+        "last_ranked_price",
+        "least_price"
+    }
 
-    for _, row in df.iterrows():
-        average = row["average"]
-        market_avg = row["market_average"]
-        last_ranked = row["last_ranked_price"]
-        least_price = row["least_price"]
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"Missing columns: {missing}")
+
+    # INTERNAL ONLY
+    market_average = df["average"].mean()
+
+    def compute_price(row):
+        avg = row["average"]
+        last_rank = row["last_ranked_price"]
+        least = row["least_price"]
         inflation = row["inflation_rate_percent"]
 
-        # Step 1: Base anchor
-        base_price = min(
-            p for p in [average, last_ranked, market_avg]
-            if pd.notna(p)
-        )
+        # Base anchored to competition + market center
+        base = min(last_rank, avg, market_average)
 
-        adjusted_price = base_price
+        # Inflation correction
+        if inflation > 0:
+            base *= 0.97   # overpriced → push down
+        else:
+            base *= 1.01   # aggressive → small buffer
 
-        # Step 2: Inflation adjustment
-        if inflation > 5:
-            adjusted_price = base_price * 0.97  # reduce 3%
+        # Safety floor
+        final_price = max(base, least)
 
-        # Step 3: Floor protection
-        final_price = max(adjusted_price, least_price)
+        return round(final_price, 2)
 
-        final_prices.append(round(final_price, 2))
-
-    df["recommended_price"] = final_prices
+    df["recommended_price"] = df.apply(compute_price, axis=1)
 
     df.to_csv(company_check_csv, index=False)
-    return df
+
+    print("✅ Final recommended_price calculated (market_average internal)")
