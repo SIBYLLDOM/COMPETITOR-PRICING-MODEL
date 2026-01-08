@@ -1,87 +1,57 @@
 # processors/seller_quantity_analysis.py
 
 import pandas as pd
-from processors.product_fingerprint import fingerprint
 
 
-def _detect_bid_column(df):
+def get_quantity_scaling_factor(
+    basic_csv: str,
+    filtered_financial_csv: str,
+    user_quantity: int
+) -> float:
     """
-    Detect bid number column in basic CSV.
-    """
-    for col in ["bid_no", "Bid No", "Bid Number"]:
-        if col in df.columns:
-            return col
-    raise ValueError(f"Bid number column not found. Columns: {list(df.columns)}")
-
-
-def enrich_with_quantity_adjusted_price(
-    company_check_csv,
-    basic_csv,
-    user_product,
-    user_quantity
-):
-    """
-    Adds quantity_adjusted_price using BID-LEVEL quantity logic.
+    Computes a GLOBAL quantity scaling factor.
+    Uses linear scaling from available quantity & price data.
+    RETURNS a multiplier (not stored anywhere).
     """
 
-    company_df = pd.read_csv(company_check_csv)
     basic_df = pd.read_csv(basic_csv, low_memory=False)
+    fin_df = pd.read_csv(filtered_financial_csv, low_memory=False)
 
-    bid_col = _detect_bid_column(basic_df)
+    # Normalize bid_no
+    basic_df["bid_no"] = basic_df["bid_no"].astype(str)
+    fin_df["bid_no"] = fin_df["bid_no"].astype(str)
 
-    # Fingerprint user products
-    user_products = [p.strip() for p in user_product.split(",") if p.strip()]
-    user_fps = {fingerprint(p) for p in user_products if fingerprint(p)}
+    # Quantity lookup
+    qty_df = basic_df[["bid_no", "quantity"]].dropna().copy()
+    qty_df["quantity"] = (
+        qty_df["quantity"]
+        .astype(str)
+        .str.extract(r"(\d+\.?\d*)")[0]
+        .astype(float)
+    )
+    qty_df = qty_df[qty_df["quantity"] > 0]
 
-    adjusted_prices = []
+    # Price lookup
+    price_df = fin_df[["bid_no", "Total Price"]].dropna().copy()
+    price_df["Total Price"] = pd.to_numeric(
+        price_df["Total Price"], errors="coerce"
+    )
+    price_df = price_df.dropna()
 
-    for _, row in company_df.iterrows():
-        bid_no = row["bid_no"]
+    merged = qty_df.merge(price_df, on="bid_no", how="inner")
 
-        bid_rows = basic_df[
-            (basic_df[bid_col] == bid_no)
-            & (basic_df["quantity"].notna())
-        ]
+    if merged.empty:
+        # No quantity data available → neutral scaling
+        return 1.0
 
-        if bid_rows.empty:
-            adjusted_prices.append(None)
-            continue
+    # Compute unit prices
+    merged["unit_price"] = merged["Total Price"] / merged["quantity"]
 
-        matched_rows = []
+    # Estimate expected price for user quantity
+    merged["expected_price"] = merged["unit_price"] * user_quantity
 
-        for _, r in bid_rows.iterrows():
-            offered = str(r.get("Offered Item", "")).replace("Item Categories :", "")
-            for item in offered.split(","):
-                if fingerprint(item) in user_fps:
-                    matched_rows.append(r)
-                    break
+    # Compare against original prices
+    scaling_factors = merged["expected_price"] / merged["Total Price"]
 
-        if not matched_rows:
-            adjusted_prices.append(None)
-            continue
-
-        temp_df = pd.DataFrame(matched_rows)
-
-        # Ensure numeric
-        temp_df["quantity"] = pd.to_numeric(temp_df["quantity"], errors="coerce")
-        temp_df["Total Price"] = pd.to_numeric(temp_df["Total Price"], errors="coerce")
-        temp_df = temp_df.dropna(subset=["quantity", "Total Price"])
-
-        if temp_df.empty:
-            adjusted_prices.append(None)
-            continue
-
-        # Unit price
-        temp_df["unit_price"] = temp_df["Total Price"] / temp_df["quantity"]
-
-        # Nearest quantity logic
-        temp_df["qty_diff"] = abs(temp_df["quantity"] - user_quantity)
-        nearest = temp_df.sort_values("qty_diff").iloc[0]
-
-        est_price = nearest["unit_price"] * user_quantity
-        adjusted_prices.append(round(est_price, 2))
-
-    company_df["quantity_adjusted_price"] = adjusted_prices
-    company_df.to_csv(company_check_csv, index=False)
-
-    print("✅ Quantity-based price adjustment complete (bid-level)")
+    # Return median factor (robust, audit-safe)
+    return round(scaling_factors.median(), 3)

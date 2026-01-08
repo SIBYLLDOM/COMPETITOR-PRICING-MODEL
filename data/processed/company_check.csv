@@ -1,4 +1,4 @@
-S.No.,bid_no,Seller Name,average,inflation_rate_percent,last_ranked_price,least_price,quantity_adjusted_price,recommended_price
-3.0,GEM/2025/B/6774259,ANAND CHEMICEUTICS Under PMA,9528.0,10.14,9528.0,9528.0,,9528.0
-2.0,GEM/2025/B/6774259,B.K.SURGICINES Under PMA,8265.6,-4.46,8265.6,8265.6,,8348.26
-1.0,GEM/2025/B/6774259,ROYAL BIOTECH Under PMA,8160.0,-5.68,8160.0,8160.0,,8241.6
+S.No.,bid_no,Seller Name,average,inflation_rate_percent,last_ranked_price,least_price,recommended_price
+3.0,GEM/2025/B/6774259,ANAND CHEMICEUTICS Under PMA,9528.0,10.14,9528.0,9528.0,10494.14
+2.0,GEM/2025/B/6774259,B.K.SURGICINES Under PMA,8265.6,-4.46,8265.6,8265.6,8265.6
+1.0,GEM/2025/B/6774259,ROYAL BIOTECH Under PMA,8160.0,-5.68,8160.0,8160.0,8160.0
