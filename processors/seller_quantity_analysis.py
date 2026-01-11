@@ -9,18 +9,26 @@ def get_quantity_scaling_factor(
     user_quantity: int
 ) -> float:
     """
-    Computes a GLOBAL quantity scaling factor.
-    Uses linear scaling from available quantity & price data.
-    RETURNS a multiplier (not stored anywhere).
+    ⚠️ CRITICAL: filtered_company.csv contains TOTAL CONTRACT PRICES.
+    
+    HARD RULES:
+    - NEVER divide prices by quantity
+    - Quantity is for CONTEXT ONLY (to find similar tender sizes)
+    - Prices in CSV are NOT unit prices
+    
+    This function now returns a contextual weight factor based on
+    quantity similarity, NOT a price rescaling factor.
+    
+    RETURNS: Always 1.0 (neutral) - prices should NOT be rescaled.
     """
 
     # Read CSVs with error handling for malformed rows
     basic_df = pd.read_csv(
         basic_csv, 
         low_memory=False,
-        on_bad_lines='skip',  # Skip rows with inconsistent field counts
+        on_bad_lines='skip',
         encoding='utf-8',
-        quoting=1,  # QUOTE_ALL
+        quoting=1,
         escapechar='\\'
     )
     fin_df = pd.read_csv(
@@ -36,7 +44,7 @@ def get_quantity_scaling_factor(
     basic_df["bid_no"] = basic_df["bid_no"].astype(str)
     fin_df["bid_no"] = fin_df["bid_no"].astype(str)
 
-    # Quantity lookup
+    # Quantity lookup (for context/filtering only)
     qty_df = basic_df[["bid_no", "quantity"]].dropna().copy()
     qty_df["quantity"] = (
         qty_df["quantity"]
@@ -56,17 +64,25 @@ def get_quantity_scaling_factor(
     merged = qty_df.merge(price_df, on="bid_no", how="inner")
 
     if merged.empty:
-        # No quantity data available → neutral scaling
+        print("⚠️ No quantity+price data available → using neutral factor")
         return 1.0
 
-    # Compute unit prices
-    merged["unit_price"] = merged["Total Price"] / merged["quantity"]
+    # 🔥 NEW LOGIC: Use quantity for CONTEXT, not rescaling
+    # Filter tenders with similar quantity range (±50% of user quantity)
+    qty_lower = user_quantity * 0.5
+    qty_upper = user_quantity * 1.5
+    
+    similar_qty = merged[
+        (merged["quantity"] >= qty_lower) & 
+        (merged["quantity"] <= qty_upper)
+    ]
+    
+    if not similar_qty.empty:
+        print(f"✅ Found {len(similar_qty)} tenders with similar quantity context")
+    else:
+        print(f"⚠️ No tenders in quantity range [{qty_lower}-{qty_upper}]")
 
-    # Estimate expected price for user quantity
-    merged["expected_price"] = merged["unit_price"] * user_quantity
-
-    # Compare against original prices
-    scaling_factors = merged["expected_price"] / merged["Total Price"]
-
-    # Return median factor (robust, audit-safe)
-    return round(scaling_factors.median(), 3)
+    # 🔑 CRITICAL: Return 1.0 (neutral factor)
+    # Prices in filtered_company.csv are TOTAL CONTRACT prices
+    # They should NOT be rescaled by quantity
+    return 1.0
