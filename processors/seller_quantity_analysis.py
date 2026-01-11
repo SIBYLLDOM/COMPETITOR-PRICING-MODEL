@@ -14,8 +14,23 @@ def get_quantity_scaling_factor(
     RETURNS a multiplier (not stored anywhere).
     """
 
-    basic_df = pd.read_csv(basic_csv, low_memory=False)
-    fin_df = pd.read_csv(filtered_financial_csv, low_memory=False)
+    # Read CSVs with error handling for malformed rows
+    basic_df = pd.read_csv(
+        basic_csv, 
+        low_memory=False,
+        on_bad_lines='skip',  # Skip rows with inconsistent field counts
+        encoding='utf-8',
+        quoting=1,  # QUOTE_ALL
+        escapechar='\\'
+    )
+    fin_df = pd.read_csv(
+        filtered_financial_csv, 
+        low_memory=False,
+        on_bad_lines='skip',
+        encoding='utf-8',
+        quoting=1,
+        escapechar='\\'
+    )
 
     # Normalize bid_no
     basic_df["bid_no"] = basic_df["bid_no"].astype(str)
