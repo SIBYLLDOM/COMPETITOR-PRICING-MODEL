@@ -26,12 +26,20 @@ def generate_seller_average(input_csv, output_csv):
         .rename(columns={"clean_price": "average"})
     )
 
+    # Count number of bids per seller (for filtering experienced bidders)
+    bid_count_df = (
+        df.groupby("Seller Name", as_index=False)
+        .size()
+        .rename(columns={"size": "bid_count"})
+    )
+
     meta_df = (
         df.groupby("Seller Name", as_index=False)
         .first()[["S.No.", "bid_no", "Seller Name"]]
     )
 
     result = meta_df.merge(l1_percentile_df, on="Seller Name")
+    result = result.merge(bid_count_df, on="Seller Name")
     
     try:
         result.to_csv(output_csv, index=False)

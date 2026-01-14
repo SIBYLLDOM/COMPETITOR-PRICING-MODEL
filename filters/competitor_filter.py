@@ -5,8 +5,9 @@ from processors.product_fingerprint import fingerprint
 
 def filter_competitors(df, user_input):
     """
-    Filters competitors using token fingerprinting.
+    Filters competitors using partial token matching.
     Supports SINGLE and MULTI product input.
+    User input tokens are matched as a subset of product tokens.
     """
 
     # 1️⃣ Split user input (supports single or comma-separated)
@@ -16,14 +17,16 @@ def filter_competitors(df, user_input):
         if p.strip()
     ]
 
-    # 2️⃣ Fingerprint each user product
-    user_fps = set()
+    # 2️⃣ Create token sets for each user product
+    user_token_sets = []
     for p in user_products:
         fp = fingerprint(p)
         if fp:
-            user_fps.add(fp)
+            # Convert fingerprint (space-separated tokens) to a set
+            tokens = set(fp.split())
+            user_token_sets.append(tokens)
 
-    if not user_fps:
+    if not user_token_sets:
         return df.iloc[0:0]  # empty dataframe
 
     matched_indices = []
@@ -39,10 +42,20 @@ def filter_competitors(df, user_input):
             if item.strip()
         ]
 
-        # 4️⃣ Match ANY product
+        # 4️⃣ Check if ANY user product tokens are a subset of ANY offered item
         for item in offered_items:
-            if fingerprint(item) in user_fps:
-                matched_indices.append(idx)
+            item_fp = fingerprint(item)
+            if item_fp:
+                item_tokens = set(item_fp.split())
+                
+                # Check if any user product matches (partial match)
+                for user_tokens in user_token_sets:
+                    # All user tokens must be present in item tokens
+                    if user_tokens.issubset(item_tokens):
+                        matched_indices.append(idx)
+                        break
+                else:
+                    continue
                 break
 
     return df.loc[matched_indices]

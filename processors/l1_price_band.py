@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-MIN_TENDER_PRICE = 50000  # ₹50,000 minimum
+
 
 
 def calculate_l1_price_band(company_check_csv: str):
@@ -12,8 +12,6 @@ def calculate_l1_price_band(company_check_csv: str):
     - L1 floor = aggressive undercut
     - L1 ceiling = conservative undercut
     
-    GUARDRAILS:
-    - Never output < ₹50,000
     - Validate band makes sense
     
     RETURNS: (low_price, high_price) as TOTAL CONTRACT prices
@@ -39,9 +37,7 @@ def calculate_l1_price_band(company_check_csv: str):
     low_price = round(l1_floor * 0.98, 2)   # 2% undercut of 5th percentile
     high_price = round(l1_ceiling * 0.995, 2)  # 0.5% undercut of 10th percentile
 
-    # 🔥 HARD GUARDRAIL: Never below ₹50,000
-    low_price = max(low_price, MIN_TENDER_PRICE)
-    high_price = max(high_price, MIN_TENDER_PRICE)
+    # Price band is ready - no artificial minimum enforced
 
     # Sanity check: high >= low
     if high_price < low_price:

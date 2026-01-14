@@ -27,7 +27,7 @@ def get_quantity_scaling_factor(
         basic_csv, 
         low_memory=False,
         on_bad_lines='skip',
-        encoding='utf-8',
+        encoding='latin-1',
         quoting=1,
         escapechar='\\'
     )
@@ -35,7 +35,7 @@ def get_quantity_scaling_factor(
         filtered_financial_csv, 
         low_memory=False,
         on_bad_lines='skip',
-        encoding='utf-8',
+        encoding='latin-1',
         quoting=1,
         escapechar='\\'
     )

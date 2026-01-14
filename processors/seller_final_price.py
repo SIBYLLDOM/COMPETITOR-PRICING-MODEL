@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-MIN_TENDER_PRICE = 50000  # ₹50,000 minimum for government tenders
+
 
 
 def enrich_with_final_price(
@@ -13,9 +13,8 @@ def enrich_with_final_price(
     🔥 CRITICAL CHANGE:
     - Treats all prices as TOTAL CONTRACT prices
     - Quantity factor is now neutral (1.0) and has NO effect
-    - Applies inflation and ensures minimum price floor
-    
-    GUARDRAIL: Never output < ₹50,000 for tender scenarios
+    - Applies inflation to base prices
+    - Uses least_price as floor (actual market minimum)
     """
 
     df = pd.read_csv(company_check_csv)
@@ -33,11 +32,8 @@ def enrich_with_final_price(
         # 🔥 REMOVED: price = price * quantity_factor
         # Reason: Prices are TOTAL CONTRACT, not unit prices
 
-        # Safety floor (use least_price from historical data)
+        # Safety floor (use least_price from historical data as minimum)
         price = max(price, least_price)
-
-        # 🔥 HARD GUARDRAIL: Never below ₹50,000 for tenders
-        price = max(price, MIN_TENDER_PRICE)
 
         recommended_prices.append(round(price, 2))
 
@@ -45,5 +41,4 @@ def enrich_with_final_price(
     df.to_csv(company_check_csv, index=False)
 
     print("✅ Final recommended_price calculated (TOTAL CONTRACT basis)")
-    print(f"   Minimum price enforced: ₹{MIN_TENDER_PRICE:,}")
 

@@ -27,7 +27,7 @@ RAW_FILE = "data/raw/scraper_single_bid_results_financial.csv"
 BASIC_FILE = "data/raw/scraper_single_bid_results_basic.csv"
 FILTERED_FILE = "data/processed/filtered_company.csv"
 COMPANY_CHECK_FILE = "data/processed/company_check.csv"
-MIN_TENDER_PRICE = 50000
+
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -82,6 +82,7 @@ class PricingResponse(BaseModel):
     confidence: str = Field(..., description="Confidence percentage")
     basis: str = Field(default="filtered_company.csv (L1 percentile pricing)")
     competitors_analyzed: int
+    top_competitors: Optional[list] = Field(None, description="Top 5 competitors with pricing details")
     timestamp: str
     warnings: Optional[list] = None
 
@@ -173,16 +174,24 @@ def generate_pricing_prediction(product: str, quantity: int) -> Dict[str, Any]:
     except Exception as e:
         raise Exception(f"Error calculating L1 price band: {str(e)}")
     
-    # Sanity checks
-    if low_price < MIN_TENDER_PRICE or high_price < MIN_TENDER_PRICE:
-        warnings.append(f"Price below tender minimum (₹{MIN_TENDER_PRICE:,}). Adjusted to minimum.")
-        low_price = max(low_price, MIN_TENDER_PRICE)
-        high_price = max(high_price, MIN_TENDER_PRICE)
+    # No minimum price enforcement - use actual calculated values
     
     # Calculate confidence
     df_check = pd.read_csv(COMPANY_CHECK_FILE)
     data_points = len(df_check)
     confidence = min(95, 50 + (data_points * 5))
+    
+    # Get top 5 competitors
+    top_competitors = []
+    df_sorted = df_check.sort_values('recommended_price').head(5)
+    for _, row in df_sorted.iterrows():
+        top_competitors.append({
+            "seller_name": row['Seller Name'],
+            "average_bidding_price": round(float(row['average']), 2),
+            "inflation_rate_percent": round(float(row['inflation_rate_percent']), 2),
+            "last_l1_price": round(float(row['last_ranked_price']), 2),
+            "least_quoted_price": round(float(row['least_price']), 2)
+        })
     
     # Build response
     result = {
@@ -194,6 +203,7 @@ def generate_pricing_prediction(product: str, quantity: int) -> Dict[str, Any]:
         "confidence": f"{confidence}%",
         "basis": "filtered_company.csv (L1 percentile pricing)",
         "competitors_analyzed": data_points,
+        "top_competitors": top_competitors,
         "timestamp": datetime.now().isoformat(),
         "warnings": warnings if warnings else None
     }
@@ -249,7 +259,6 @@ async def health_check():
     - Uses L1-specific learning (bottom 5-10 percentile)
     - Returns TOTAL CONTRACT prices (not unit prices)
     - Quantity is for context only (no price rescaling)
-    - Minimum price guardrail: ₹50,000
     
     **Example Request:**
     ```json
@@ -324,8 +333,6 @@ async def get_system_status():
         "version": "2.0.0",
         "status": "operational",
         "configuration": {
-            "min_tender_price": MIN_TENDER_PRICE,
-            "price_type": "TOTAL_CONTRACT",
             "learning_method": "L1-specific (bottom 5-10 percentile)",
             "quantity_scaling": "disabled (neutral factor = 1.0)"
         },
@@ -356,7 +363,6 @@ async def startup_event():
     print(f"📊 Version: 2.0.0")
     print(f"🔥 L1-Optimized (Bottom Percentile Learning)")
     print(f"💼 Price Type: TOTAL CONTRACT")
-    print(f"📋 Min Tender Price: ₹{MIN_TENDER_PRICE:,}")
     
     # Check data files
     data_status = check_data_files()
